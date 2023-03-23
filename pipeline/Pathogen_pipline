@@ -1,0 +1,72 @@
+#!/bin/bash 
+
+echo -e "Hello and welcome to our automated pipeline!" 
+
+# The input we will be receiving is two separate folders the first non pathogens,  and the second pathogens - next we will create a data base. 
+
+echo -e "please create two separate folders the first non pathogens,  and the second pathogens - next we will create a data base"
+
+echo -e "Would you like us to run different lengths for you, and return only the file containing the maximum results found? [y/n]"
+read isMaxresultAns
+
+python DB_maker_pipeline.py 
+
+#now we will run the blast command which will create 2 diffrents databases
+
+nohup makeblastdb -in Not_Pathogen_DB.fas -parse_seqids -dbtype nucl 
+
+nohup makeblastdb -in Pathogen_DB.fas -parse_seqids -dbtype nucl 
+
+if [ "$isMaxresultAns" = "y" ]; then
+   python make_kmers_maxresults.py
+else
+   python make_kmers.py
+fi
+#runs blast on all the data base 3 times using a different pathogen refence each time
+echo Blast is starting
+pids=
+for f in ./*Blast.fa; do
+	nohup blastall -p blastn -d Pathogen_DB.fas -i "$f" -o "$f"_vs_P_Blast1.txt -m 8 & 
+	pids+=" $!"
+done 
+wait $pids || { echo "there were errors" >&2; exit 1; }
+
+echo Blast on the Pathogen DataBase is done!
+python best_match_against_patho_B1.py
+python new_kmers_against_patho_B1.py 
+
+pids=
+for f in ./*Blast2.fa; do
+	nohup blastall -p blastn -d Not_Pathogen_DB.fas -i "$f" -o "$f"_vs_NP_Blast2.txt -m 8 &
+	pids+=" $!"
+done   
+wait $pids || { echo "There were errors" >&2; exit 1; }
+
+python foundInNP_against_patho_B1.py
+python addSeqToResultsTitle.py
+
+
+#echo -e "Would you like to optimally merge the results obtained from all the starting points into a file containing the results that appeared in each of the pathogens we tested? [y/n]"
+#read ans
+if [ "$isMaxresultAns" = "n" ]; then
+echo -e "Now it will merge the results obtained from all the starting points into a file containing the results that appeared in each of the pathogens we tested"
+python results_DBmaker.py
+makeblastdb -in ResultsDB.fa -parse_seqids -dbtype nucl
+blastall -p blastn -d ResultsDB.fa -i resultQueryFile.fa -o bestresultTest.txt -m 8
+pids=" $!"
+wait $pids || { echo "There were errors" >&2; exit 1; }
+python bestResultParsing.py
+else 
+python choosingTheBiggest.py
+fi
+
+
+echo -e "Would you like get per of overlapping kmers in specific range?"
+read ans
+if [ "$ans" = "y" ]; then
+python followKmersInRange.py
+fi
+#python deleteAll_txt_fa_files_exceptfor_results.py
+
+
+
