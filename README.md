@@ -1,4 +1,4 @@
-# pathogenic_seq pipeline
+# pathogenic_seq Pipeline
 
 This pipeline is finding common genomics elements for one population that are not shared by another, based on multiple comparisons. 
 It generates primers for the result sequences.
